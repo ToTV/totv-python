@@ -13,6 +13,7 @@ Basic usage, create a theme based on BaseTheme and load it:
 
 """
 from __future__ import unicode_literals, absolute_import
+import abc
 import random
 
 
@@ -105,6 +106,12 @@ class BaseTheme(object):
     # Value in KeyValue pair
     value = ORANGE
 
+    def error(self, message, command=None):
+        title = "Error/{}".format(command) if command else "Error"
+        return render(items=[
+            EntityGroup([Entity(title)]),
+            EntityGroup([Entity(message)])
+        ])
 
 _theme = BaseTheme()
 
@@ -122,7 +129,16 @@ def random_colour(min_colour=2, max_colour=15):
     return random.randint(min_colour, max_colour)
 
 
-class Entity(object):
+class Renderable(object):
+    __metaclass__ = abc.ABCMeta
+
+    @abc.abstractmethod
+    def render(self):
+        """ Renders the object for display on IRC """
+        return
+
+
+class Entity(Renderable):
     """ A simple renderable entity that can accommodate a key->value pair used in messages. Eg:
 
     >>> Entity("Uploaded", "169").render()
@@ -156,7 +172,7 @@ class Entity(object):
         return self.render().encode()
 
 
-class EntityGroup(list):
+class EntityGroup(list, Renderable):
     def render(self):
         return wrap(_theme.group_sep_char.join([item.render() for item in self if item]))
 
@@ -210,3 +226,16 @@ def render(title=None, items=None):
     output.extend(i.render() for i in items if i)
     output_str = _theme.sep_char.join(output)
     return output_str
+
+
+def render_error(message, command=None):
+    """ Returns a error message in a standardized format
+
+    :param message: Error message to wrap
+    :type message: str
+    :param command: Optional command name that caused the error
+    :type command: str
+    :return: Themed/encoded error message
+    :rtype: str
+    """
+    return _theme.error(message, command=command)
