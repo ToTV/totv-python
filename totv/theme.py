@@ -51,7 +51,7 @@ REVERSE = "\026"
 UNDERLINE = "\037"
 
 
-def colourize(fg=None, bg=None, message="", auto_end=True):
+def colourize(fg: int=None, bg: int=None, message: str="", auto_end: bool=True) -> str:
     """ Generate a colour coded IRC message
 
     :param fg: Foreground colour code
@@ -106,12 +106,13 @@ class BaseTheme(object):
     # Value in KeyValue pair
     value = ORANGE
 
-    def error(self, message, command=None):
+    def error(self, message: str, command: str=""):
         title = "Error/{}".format(command) if command else "Error"
         return render(items=[
             EntityGroup([Entity(title)]),
             EntityGroup([Entity(message)])
         ])
+
 
 _theme = BaseTheme()
 

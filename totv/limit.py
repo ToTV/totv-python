@@ -56,3 +56,6 @@ class RateLimit(object):
     def __call__(self, *args, **kwargs):
         if self.is_allowed():
             return self.wrapped(*args, **kwargs)
+        else:
+            args[0].say("Rate limit hit, +1 autisms")
+

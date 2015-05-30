@@ -46,7 +46,6 @@ class ThemeTest(TestCase):
         self.assertEqual(s_3, "\x0304hi")
         self.assertEqual(s_4, "\x0304,02hi")
 
-
     def test_load_theme(self):
         theme_a = TestTheme()
         theme_a.title = YELLOW
