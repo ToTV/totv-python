@@ -3,6 +3,8 @@ from __future__ import absolute_import, print_function, unicode_literals
 import requests
 import requests_cache
 
+requests_cache.install_cache(cache_name='site_cache', backend='memory', expire_after=10800)
+
 _base_url = ""
 _api_key = ""
 
@@ -32,7 +34,6 @@ def bot_api_request(endpoint, method='GET', payload=None):
     :return:
     :rtype: dict
     """
-    requests_cache.install_cache(cache_name='site_cache', backend='memory', expire_after=10800)
     url = _base_url + endpoint
     headers = {
         'X-IRCBOT-API-KEY': _api_key, 'Content-type': 'application/json',

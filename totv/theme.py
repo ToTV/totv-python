@@ -153,8 +153,8 @@ class Entity(Renderable):
     """
 
     def __init__(self, key, value=None):
-        self.key = key
-        self.value = value
+        self.key = str(key)
+        self.value = str(value) if value is not None else ""
 
     def render(self):
         if self.value:
