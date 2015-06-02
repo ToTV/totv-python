@@ -36,7 +36,8 @@ def bot_api_request(endpoint, method='GET', payload=None):
     """
     url = _base_url + endpoint
     headers = {
-        'X-IRCBOT-API-KEY': _api_key, 'Content-type': 'application/json',
+        'X-IRCBOT-API-KEY': _api_key,
+        'Content-type': 'application/json',
         'Accept': 'application/json'
     }
     if method == 'GET':
