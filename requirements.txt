@@ -1,3 +1,4 @@
+pytz
 sqlalchemy
 requests
 requests_cache
