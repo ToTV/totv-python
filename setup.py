@@ -10,5 +10,5 @@ setup(
     author='toor',
     url="https://github.com/ToTV/totv-python",
     author_email='toor@titansof.tv',
-    packages=['totv'],
+    packages=['totv', 'totv.service'],
 )
