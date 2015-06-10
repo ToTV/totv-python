@@ -60,7 +60,7 @@ class ThemeTest(TestCase):
         self.assertEqual(b_value, RED_LT)
 
     def test_entity_render(self):
-        self.assertEqual(str(Entity("a", "b")), Entity("a", "b").render())
+        self.assertEqual(str(Entity("a", "b")), str(Entity("a", "b").render()))
         self.assertEqual(Entity("a", "b").render(), "\x0303a\x0f: \x0307b\x0f")
         self.assertEqual(str(Entity("a", "b")), "\x0303a\x0f: \x0307b\x0f")
         self.assertEqual(str(Entity("a")), Entity("a").render())

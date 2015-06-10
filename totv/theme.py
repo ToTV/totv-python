@@ -170,7 +170,7 @@ class Entity(Renderable):
         return self.render()
 
     def __str__(self):
-        return self.render().encode()
+        return self.render()
 
 
 class EntityGroup(list, Renderable):

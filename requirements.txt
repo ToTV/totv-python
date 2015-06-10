@@ -1,3 +1,4 @@
+redis
 pytz
 sqlalchemy
 requests
