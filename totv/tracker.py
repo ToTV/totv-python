@@ -3,9 +3,12 @@
 This module is used to communicate with mika's API
 """
 from __future__ import absolute_import, print_function, unicode_literals
+import re
 import redis
 import requests
 import requests_cache
+from http import client as httplib
+from totv import exc
 
 requests_cache.install_cache(cache_name='site_cache', backend='memory', expire_after=10800)
 
@@ -53,6 +56,19 @@ def bot_api_request(endpoint, method='GET', payload=None):
     return r.json()
 
 
+_ih_rx = re.compile("^[0-9a-zA-Z]{40}$")
+
+def validate_info_hash(info_hash):
+    if not _ih_rx.match(info_hash):
+        raise exc.ValidationError("Invalid info_hash supplied: {}".format(info_hash))
+    return info_hash
+
+def validate_torrent_id(torrent_id):
+    if torrent_id <= 0:
+        raise exc.ValidationError("Invalid torrent_id supplied: {}".format(torrent_id))
+    return torrent_id
+
+
 class Client(object):
     """ A simple API client used to communicate with the tracker
 
@@ -98,19 +114,32 @@ class Client(object):
     def uptime(self):
         return self._request("/uptime").json()
 
-    def torrent_get(self, torrent_id):
-        resp = self._request("/torrent/{}".format(torrent_id))
+    def torrent_get(self, info_hash):
+        validate_info_hash(info_hash)
+        resp = self._request("/torrent/{}".format(info_hash))
         if resp.ok:
             return resp.json()
-        return None
+        elif resp.status_code == httplib.NOT_FOUND:
+            raise exc.NotFoundError("info hash not found: {}".format(info_hash))
+        else:
+            raise exc.TrackerError("Invalid response returned from tracker")
 
     def torrent_get_all(self, torrent_ids):
-        pass
+        found, not_found = [], []
+        for info_hash in torrent_ids:
+            try:
+                found.append(self.torrent_get(info_hash))
+            except exc.NotFoundError:
+                not_found.append(info_hash)
+        return found, not_found
 
-    def torrent_add(self, info_hash, torrent_id):
+    def torrent_add(self, info_hash, torrent_id, name):
+        validate_info_hash(info_hash)
+        validate_torrent_id(torrent_id)
         return self._request("/torrent", method='post', payload={
-            'info_hash': info_hash,
-            'torrent_id': torrent_id
+            'info_hash': validate_info_hash(info_hash),
+            'torrent_id': validate_torrent_id(torrent_id),
+            'name': name
         })
 
     def torrent_del(self, torrent_id):
@@ -176,7 +205,7 @@ class Client(object):
                 if len(key) != 44:
                     continue
                 tor = self._redis.hgetall(key)
-            except ResponseError as err:
+            except redis.ResponseError as err:
                 print(err)
                 print(key)
                 break
@@ -200,7 +229,7 @@ class Client(object):
                     'enabled': data.get(b'enabled', b"0").decode()
                 }
                 users.append(user)
-            except ResponseError:
+            except redis.ResponseError:
                 # print("Dropping erroneous key: {}".format(k))
                 # self._redis.delete(k)
                 pass

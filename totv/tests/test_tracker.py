@@ -3,6 +3,7 @@ import random
 import unittest
 import logging
 from totv import tracker
+from totv import exc
 
 logging.captureWarnings(True)
 
@@ -10,21 +11,22 @@ logging.captureWarnings(True)
 class ClientTest(unittest.TestCase):
     hash_1 = "40b8b386a0c2f03d492399b9aa7297aefdb84641"
     id_1 = 9999999999999
+    name_1 = "test.torrent-group"
 
     def setUp(self):
         self.client = tracker.Client("https://localhost:34001/api")
+        self.client.torrent_add("40b8b386a0c2f03d492399b9aa7297aefdb84641", 100, self.name_1)
 
     def test_torrent_get(self):
         # TODO this will pass once torrent client get primed onstartup
-        # t1 = self.client.torrent_get(3886)
-        # self.assertIsNotNone(t1)
-        # self.assertEqual(t1['torrent_id'], 3886)
-
-        t2 = self.client.torrent_get(999999999999999)
-        self.assertIsNone(t2)
+        t1 = self.client.torrent_get("85a60894fad856dd1340f45a0c8ea8ece9316baa")
+        self.assertIsNotNone(t1)
+        self.assertEqual(t1['torrent_id'], 3200)
+        with self.assertRaises(exc.NotFoundError):
+            self.client.torrent_get(999999999999999)
 
     def test_torrent_add(self):
-        resp = self.client.torrent_add(self.hash_1, self.id_1)
+        resp = self.client.torrent_add(self.hash_1, self.id_1, self.name_1)
         self.assertTrue(resp)
 
     def test_torrent_del(self):
