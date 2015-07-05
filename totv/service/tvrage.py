@@ -17,14 +17,15 @@ NO_NEXT_EPISODE = 80085
 zone = timezone("US/Eastern")
 
 
-def schedule(key):
+def schedule(key, offset=0):
     resp_xml = requests.get("{}{}".format(base_url, "fullschedule.php"), params=urlencode({'key': key}))
     resp = objectify.fromstring(bytes(resp_xml.text.encode('utf8', 'replace')))
     schedule_data = {}
     cur_time = datetime.now(tz=utc).astimezone(zone)
     # Stupid fix for tvrage returning single digit months
     today_date_fmt = datetime.now(tz=utc).astimezone(timezone("US/Pacific")).strftime("%Y-{}-%-d")
-    today_date = today_date_fmt.format(int(datetime.now(tz=utc).astimezone(timezone("US/Pacific")).strftime("%m")))
+    date = int(datetime.now(tz=utc).astimezone(timezone("US/Pacific")).strftime("%m")) + offset
+    today_date = today_date_fmt.format()
     for i, day in enumerate(resp.DAY):
         if day.attrib['attr'] == today_date:
             schedule_data['date'] = day.attrib['attr']

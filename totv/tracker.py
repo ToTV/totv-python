@@ -6,11 +6,10 @@ from __future__ import absolute_import, print_function, unicode_literals
 import re
 import redis
 import requests
-import requests_cache
 from http import client as httplib
 from totv import exc
 
-requests_cache.install_cache(cache_name='site_cache', backend='memory', expire_after=10800)
+
 
 _base_url = ""
 _api_key = ""
@@ -58,10 +57,13 @@ def bot_api_request(endpoint, method='GET', payload=None):
 
 _ih_rx = re.compile("^[0-9a-zA-Z]{40}$")
 
+
 def validate_info_hash(info_hash):
+    info_hash = str(info_hash)
     if not _ih_rx.match(info_hash):
         raise exc.ValidationError("Invalid info_hash supplied: {}".format(info_hash))
     return info_hash
+
 
 def validate_torrent_id(torrent_id):
     if torrent_id <= 0:
@@ -101,28 +103,26 @@ class Client(object):
             resp = requests.delete(self._make_url(path), verify=self._verify)
         else:
             raise Exception("no")
+        if resp.status_code == httplib.NOT_FOUND:
+            raise exc.NotFoundError("Entity not found")
+        if resp.status_code == httplib.CONFLICT:
+            raise exc.DuplicateError("Entity already exists")
+        elif not resp.ok:
+            raise exc.BadResponse("Received bad response from server: {}".format(resp.status_code))
         return resp
 
     def _make_url(self, path):
         return "".join([self._api_uri, path])
 
-    @property
     def version(self):
         return self._request("/version").json()
 
-    @property
     def uptime(self):
         return self._request("/uptime").json()
 
     def torrent_get(self, info_hash):
         validate_info_hash(info_hash)
-        resp = self._request("/torrent/{}".format(info_hash))
-        if resp.ok:
-            return resp.json()
-        elif resp.status_code == httplib.NOT_FOUND:
-            raise exc.NotFoundError("info hash not found: {}".format(info_hash))
-        else:
-            raise exc.TrackerError("Invalid response returned from tracker")
+        return self._request("/torrent/{}".format(info_hash)).json()
 
     def torrent_get_all(self, torrent_ids):
         found, not_found = [], []
@@ -136,14 +136,21 @@ class Client(object):
     def torrent_add(self, info_hash, torrent_id, name):
         validate_info_hash(info_hash)
         validate_torrent_id(torrent_id)
-        return self._request("/torrent", method='post', payload={
+        pl = {
             'info_hash': validate_info_hash(info_hash),
             'torrent_id': validate_torrent_id(torrent_id),
             'name': name
-        })
+        }
+        return self._request("/torrent", method='post', payload=pl)
 
-    def torrent_del(self, torrent_id):
-        return self._request("/torrent/{}".format(torrent_id), method='delete').ok
+    def torrent_del(self, info_hash):
+        resp = self._request("/torrent/{}".format(info_hash), method='delete')
+        if resp.ok:
+            return True
+        elif resp.status_code == httplib.NOT_FOUND:
+            raise exc.NotFoundError("Unknown info hash, cannot delete: {}".format(info_hash))
+        else:
+            raise exc.BadResponse("Invalid response returned from tracker")
 
     def user_get_active(self, user_id):
         pass
@@ -157,41 +164,65 @@ class Client(object):
     def user_get_hnr(self, user_id):
         pass
 
-    def user_update(self, user_id, uploaded=None, downloaded=None, passkey=None, can_leech=None):
+    def user_update(self, user_id, uploaded=None, downloaded=None, passkey=None, can_leech=None, enabled=None):
         user = self.user_get(user_id)
-        if not user:
-            return False
         updated_data = {
+            "name": user["username"],
             'uploaded': uploaded if uploaded is not None else user['uploaded'],
             'downloaded': downloaded if downloaded is not None else user['downloaded'],
             'can_leech': can_leech if can_leech is not None else user['can_leech'],
             'passkey': passkey if passkey is not None else user['passkey'],
+            "enabled": enabled if enabled is not None else user["enabled"]
         }
 
         resp = self._request("/user/{}".format(user_id), 'post', payload=updated_data)
-        return resp.ok
+        if resp.status_code == httplib.ACCEPTED:
+            return True
+        else:
+            raise exc.BadResponse("Received bad response from server: {}".format(resp.status_code))
 
     def user_get(self, user_id):
         resp = self._request("/user/{}".format(user_id))
-        return resp.json() if resp.ok else None
+        if resp.ok:
+            return resp.json()
+        elif resp.status_code == httplib.NOT_FOUND:
+            raise exc.NotFoundError("Unknown user id: {}".format(user_id))
+        else:
+            raise exc.BadResponse("Error fetching user api")
 
-    def user_add(self, user_id, passkey):
-        resp = self._request("/user", method='post', payload={
+    def user_add(self, name, user_id, passkey, can_leech=True):
+        self._request("/user", method='post', payload={
             'user_id': user_id,
-            'passkey': passkey
+            'passkey': passkey,
+            'can_leech': can_leech,
+            'name': name
         })
+        return self.user_get(user_id)
+
+    def user_del(self, user_id):
+        resp = self._request("/user/{}".format(user_id), method="delete")
         return resp.ok
 
     def whitelist_del(self, prefix):
         resp = self._request("/whitelist/{}".format(prefix), method='delete')
-        return resp.ok
+        if resp.ok:
+            return True
+        elif resp.status_code == httplib.NOT_FOUND:
+            raise exc.NotFoundError("Unknown client prefix supplied: {}".format(prefix))
+        else:
+            raise exc.BadResponse("Bad response from server: {}".format(resp.status_code))
 
     def whitelist_add(self, prefix, client_name):
         resp = self._request("/whitelist", method='post', payload={
             'prefix': prefix,
             'client': client_name
         })
-        return resp.ok
+        if resp.ok:
+            return True
+        elif resp.status_code == httplib.CONFLICT:
+            raise exc.DuplicateError("Whitelist entry already exists: {}/{}".format(prefix, client_name))
+        else:
+            raise exc.BadResponse("Bad response from server: {}".format(resp.status_code))
 
     def torrent_get_all_redis(self):
         torrents = []
