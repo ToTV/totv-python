@@ -16,6 +16,11 @@ def rand_info_hash(n=40):
 
 
 class ClientTest(unittest.TestCase):
+    """
+    This test suite is used to test both the client itself as well as acting as a test suite for the
+    tracker and api endpoints used on the tracker. Eventually the tracker will have integrated tests for
+    these.
+    """
     hash_1 = rand_info_hash()
     id_1 = random.randint(1000000, 1000000000)
     name_1 = "test.torrent.{}-group".format(rand_info_hash(10))
@@ -23,6 +28,7 @@ class ClientTest(unittest.TestCase):
 
     def setUp(self):
         self.client = tracker.Client("https://localhost:34001/api")
+        self.tracker_host = "http://localhost:34000/"
 
     def _load_test_torrent(self):
         self.client.torrent_add(self.hash_1, self.id_1, self.name_1)
