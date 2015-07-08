@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
-import random
 from string import ascii_lowercase, digits
 import unittest
 import logging
 import http.client as httplib
 import random
+from urllib.parse import quote_plus
+import requests
 from totv import tracker
 from totv import exc
 
@@ -13,6 +14,57 @@ logging.captureWarnings(True)
 
 def rand_info_hash(n=40):
     return ''.join(random.SystemRandom().choice(ascii_lowercase + digits) for _ in range(n))
+
+
+class FakeTorrentClient(object):
+    """
+    Emulates a client, allowing simple customizations of each request type.
+    """
+    def __init__(self, info_hash=None, passkey=None, host="http://localhost:30000/", peer_id=None,
+                 port=12345, uploaded=0, downloaded=0, left=0, corrupt=0, key=None, numwant=30,
+                 supportcrypto=1, no_peer_id=1, ip="12.34.56.78"):
+        self.passkey = passkey or rand_info_hash(32)
+        self._params = {
+            "info_hash": quote_plus(info_hash or rand_info_hash()),
+            "peer_id": peer_id or "-DE13B0-!ixmP~saB1w4",
+            "uploaded": uploaded,
+            "downloaded": downloaded,
+            "left": left,
+            "ip": ip,
+            "port": port,
+            "corrupt": corrupt,
+            "key": key or rand_info_hash(8).upper(),
+            "numwant": numwant,
+            "compact": 1,
+            "no_peer_id": no_peer_id,
+            "supportcrypto": supportcrypto,
+            "event": "started"
+        }
+        self.host = host
+
+    def _make_url(self, endpoint):
+        return "{}{}{}".format(self.host, self.passkey, endpoint)
+
+    def _gen_params(self, options=None):
+        params = self._params.copy()
+        if options:
+            params.update(options)
+        return params
+
+    def announce(self, options=None, event="announce"):
+        params = self._gen_params(options)
+        params['event'] = event
+        return requests.get(self._make_url("/announce"), params=params)
+
+    def stop(self, options=None):
+        return self.announce(options=options, event="stopped")
+
+    def start(self, options=None):
+        return self.announce(options=options, event="start")
+
+    def completed(self, options=None):
+        return self.announce(options=options, event="completed")
+
 
 
 class ClientTest(unittest.TestCase):
@@ -41,6 +93,12 @@ class ClientTest(unittest.TestCase):
             except exc.NotFoundError:
                 pass
         self.added = []
+
+    def test_announce(self):
+        self._load_test_torrent()
+        torrent_client = FakeTorrentClient(info_hash=self.hash_1, host="http://172.16.1.12:34000/")
+        resp = torrent_client.announce()
+        self.assertTrue(resp.ok)
 
     def test_torrent_get(self):
         self._load_test_torrent()
