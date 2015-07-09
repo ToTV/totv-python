@@ -155,6 +155,9 @@ class Client(object):
         else:
             raise exc.BadResponse("Invalid response returned from tracker")
 
+    def get_torrent_peers(self, info_hash):
+        return self._request("/torrent/{}/peers".format(validate_info_hash(info_hash))).json()
+
     def user_get_active(self, user_id):
         pass
 

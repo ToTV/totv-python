@@ -76,22 +76,30 @@ class ClientTest(unittest.TestCase):
     hash_1 = rand_info_hash()
     id_1 = random.randint(1000000, 1000000000)
     name_1 = "test.torrent.{}-group".format(rand_info_hash(10))
+    user_name = "test_user"
+    user_id = 99999999
+    passkey = rand_info_hash(32)
     added = []
 
     def setUp(self):
         self.client = tracker.Client("https://localhost:34001/api")
         self.tracker_host = "http://localhost:34000/"
+        self.client.user_add(self.user_name, self.user_id, self.passkey)
 
     def _load_test_torrent(self):
         self.client.torrent_add(self.hash_1, self.id_1, self.name_1)
         self.added.append(self.hash_1)
 
     def assertBencodedValues(self, benc_str, checks=None):
-        benc_data = bencodepy.decode(benc_str)
-        if checks:
-            self.assertDictContainsSubset(checks, benc_data)
-            # for k, v in checks.items():
-            #     self.assertEqual(v, benc_data[k])
+        try:
+            benc_data = bencodepy.decode(benc_str)
+        except bencodepy.DecodingError as err:
+            self.fail(err)
+        else:
+            if checks:
+                self.assertDictContainsSubset(checks, benc_data)
+                # for k, v in checks.items():
+                #     self.assertEqual(v, benc_data[k])
 
     def tearDown(self):
         for ih in self.added:
@@ -100,12 +108,19 @@ class ClientTest(unittest.TestCase):
             except exc.NotFoundError:
                 pass
         self.added = []
+        self.client.user_del(self.user_id)
 
     def test_announce(self):
         self._load_test_torrent()
         torrent_client = FakeTorrentClient(info_hash=self.hash_1, host="http://127.0.0.1:34000/")
         resp = torrent_client.announce()
         self.assertTrue(resp.ok)
+        peers = self.client.get_torrent_peers(self.hash_1)
+        for peer in peers:
+            if peer['peer_id'] == torrent_client._params['peer_id']:
+                break
+        else:
+            self.fail("Could not find peer in active swarm")
 
     def test_announce_failures(self):
         self._load_test_torrent()
