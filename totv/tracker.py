@@ -95,7 +95,9 @@ class Client(object):
         self._redis = redis.StrictRedis(host=redis_host, port=int(redis_port), db=int(redis_db))
         self._verify = verify
 
-    def _request(self, path, method='get', payload=None):
+    def _request(self, path, method='get', payload=None, valid_codes=None):
+        if valid_codes is None:
+            valid_codes = []
         if method == "get":
             resp = requests.get(self._make_url(path), verify=self._verify, auth=self._auth)
         elif method == "post":
@@ -103,14 +105,15 @@ class Client(object):
         elif method == "delete":
             resp = requests.delete(self._make_url(path), verify=self._verify, auth=self._auth)
         else:
-            raise Exception("no")
+            raise NotImplementedError("Unsupported HTTP method: {}".format(method))
         if resp.status_code == httplib.NOT_FOUND:
             raise exc.NotFoundError("Entity not found")
-        if resp.status_code == httplib.CONFLICT:
+        elif resp.status_code == httplib.CONFLICT:
             raise exc.DuplicateError("Entity already exists")
-        elif not resp.ok:
+        elif not resp.ok and not resp.status_code not in valid_codes:
             raise exc.BadResponse("Received bad response from server: {}".format(resp.status_code))
-        return resp
+        else:
+            return resp
 
     def _make_url(self, path):
         return "".join([self._api_uri, path])
@@ -122,8 +125,7 @@ class Client(object):
         return self._request("/uptime").json()
 
     def torrent_get(self, info_hash):
-        validate_info_hash(info_hash)
-        return self._request("/torrent/{}".format(info_hash)).json()
+        return self._request("/torrent/{}".format(validate_info_hash(info_hash))).json()
 
     def torrent_get_all(self, torrent_ids):
         found, not_found = [], []

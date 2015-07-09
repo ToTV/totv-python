@@ -66,7 +66,6 @@ class FakeTorrentClient(object):
         return self.announce(options=options, event="completed")
 
 
-
 class ClientTest(unittest.TestCase):
     """
     This test suite is used to test both the client itself as well as acting as a test suite for the
@@ -96,9 +95,15 @@ class ClientTest(unittest.TestCase):
 
     def test_announce(self):
         self._load_test_torrent()
-        torrent_client = FakeTorrentClient(info_hash=self.hash_1, host="http://172.16.1.12:34000/")
+        torrent_client = FakeTorrentClient(info_hash=self.hash_1, host="http://127.0.0.1:34000/")
         resp = torrent_client.announce()
         self.assertTrue(resp.ok)
+
+    def test_announce_failures(self):
+        self._load_test_torrent()
+        torrent_client = FakeTorrentClient(info_hash=self.hash_1, host="http://127.0.0.1:34000/")
+        resp_1 = torrent_client.announce(options={'info_hash': rand_info_hash()})
+        self.assertEqual(900, resp_1.status_code)
 
     def test_torrent_get(self):
         self._load_test_torrent()

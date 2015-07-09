@@ -78,7 +78,7 @@ def colourize(fg: int=None, bg: int=None, message: str="", auto_end: bool=True) 
 class BaseTheme(object):
     name = "base_theme"
 
-    # Used as seperator between KeyValue/other pair elements in the message
+    # Used as separator between KeyValue/other pair elements in the message
     sep_char = colourize(fg=BLUE_LT, message=" :: ")
 
     sep_char_alt = "☆"
