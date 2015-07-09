@@ -4,3 +4,4 @@ sqlalchemy
 requests
 requests_cache
 raven
+bencodepy

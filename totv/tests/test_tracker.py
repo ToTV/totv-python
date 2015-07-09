@@ -5,6 +5,7 @@ import logging
 import http.client as httplib
 import random
 from urllib.parse import quote_plus
+import bencodepy
 import requests
 from totv import tracker
 from totv import exc
@@ -85,6 +86,13 @@ class ClientTest(unittest.TestCase):
         self.client.torrent_add(self.hash_1, self.id_1, self.name_1)
         self.added.append(self.hash_1)
 
+    def assertBencodedValues(self, benc_str, checks=None):
+        benc_data = bencodepy.decode(benc_str)
+        if checks:
+            self.assertDictContainsSubset(checks, benc_data)
+            # for k, v in checks.items():
+            #     self.assertEqual(v, benc_data[k])
+
     def tearDown(self):
         for ih in self.added:
             try:
@@ -104,6 +112,7 @@ class ClientTest(unittest.TestCase):
         torrent_client = FakeTorrentClient(info_hash=self.hash_1, host="http://127.0.0.1:34000/")
         resp_1 = torrent_client.announce(options={'info_hash': rand_info_hash()})
         self.assertEqual(900, resp_1.status_code)
+        self.assertBencodedValues(resp_1.content, {b"failure reason": b"Generic Error :("})
 
     def test_torrent_get(self):
         self._load_test_torrent()
