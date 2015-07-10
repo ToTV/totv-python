@@ -110,7 +110,7 @@ class Client(object):
             raise exc.NotFoundError("Entity not found")
         elif resp.status_code == httplib.CONFLICT:
             raise exc.DuplicateError("Entity already exists")
-        elif not resp.ok and not resp.status_code not in valid_codes:
+        elif not resp.ok and resp.status_code not in valid_codes:
             raise exc.BadResponse("Received bad response from server: {}".format(resp.status_code))
         else:
             return resp
