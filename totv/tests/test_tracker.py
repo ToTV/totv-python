@@ -84,11 +84,21 @@ class ClientTest(unittest.TestCase):
     def setUp(self):
         self.client = tracker.Client("https://localhost:34001/api")
         self.tracker_host = "http://localhost:34000/"
-        self.client.user_add(self.user_name, self.user_id, self.passkey)
+        try:
+            self.client.torrent_del(self.hash_1)
+        except exc.NotFoundError:
+            pass
+        try:
+            self.client.user_add(self.user_name, self.user_id, self.passkey)
+        except exc.DuplicateError:
+            pass
 
-    def _load_test_torrent(self):
-        self.client.torrent_add(self.hash_1, self.id_1, self.name_1)
-        self.added.append(self.hash_1)
+    def _load_test_torrent(self, info_hash=None):
+        if info_hash is None:
+            info_hash = self.hash_1
+        self.client.torrent_add(info_hash, self.id_1, self.name_1)
+        self.added.append(info_hash)
+        return info_hash
 
     def assertBencodedValues(self, benc_str, checks=None):
         try:
@@ -108,7 +118,10 @@ class ClientTest(unittest.TestCase):
             except exc.NotFoundError:
                 pass
         self.added = []
-        self.client.user_del(self.user_id)
+        try:
+            self.client.user_del(self.user_id)
+        except exc.NotFoundError:
+            pass
 
     def test_announce(self):
         self._load_test_torrent()
@@ -138,10 +151,14 @@ class ClientTest(unittest.TestCase):
             self.client.torrent_get(rand_info_hash())
 
     def test_torrent_add(self):
-        resp = self.client.torrent_add(self.hash_1, self.id_1, self.name_1)
+        torrent_id = random.randint(999999, 99999999)
+        info_hash = rand_info_hash()
+        self.added.append(info_hash)
+        resp = self.client.torrent_add(info_hash, torrent_id, self.name_1)
         self.assertEqual(httplib.CREATED, resp.status_code)
-        resp2 = self.client.torrent_add(self.hash_1, self.id_1, self.name_1)
+        resp2 = self.client.torrent_add(info_hash, torrent_id, self.name_1)
         self.assertEqual(httplib.ACCEPTED, resp2.status_code)
+
 
     def test_torrent_del(self):
         self._load_test_torrent()
