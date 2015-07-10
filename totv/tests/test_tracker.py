@@ -6,6 +6,7 @@ import http.client as httplib
 import random
 from urllib.parse import quote_plus
 import bencodepy
+import binascii
 import requests
 from totv import tracker
 from totv import exc
@@ -14,7 +15,11 @@ logging.captureWarnings(True)
 
 
 def rand_info_hash(n=40):
-    return ''.join(random.SystemRandom().choice(ascii_lowercase + digits) for _ in range(n))
+    return ''.join(random.SystemRandom().choice(ascii_lowercase[0:6] + digits) for _ in range(n))
+
+
+def hex2bin(hex_info_hash):
+    return binascii.a2b_hex(hex_info_hash.upper())
 
 
 class FakeTorrentClient(object):
@@ -26,7 +31,7 @@ class FakeTorrentClient(object):
                  supportcrypto=1, no_peer_id=1, ip="12.34.56.78"):
         self.passkey = passkey or rand_info_hash(32)
         self._params = {
-            "info_hash": quote_plus(info_hash or rand_info_hash()),
+            "info_hash": info_hash or rand_info_hash(),
             "peer_id": peer_id or "-DE13B0-!ixmP~saB1w4",
             "uploaded": uploaded,
             "downloaded": downloaded,
@@ -50,6 +55,10 @@ class FakeTorrentClient(object):
         params = self._params.copy()
         if options:
             params.update(options)
+        try:
+            params['info_hash'] = hex2bin(params['info_hash'])
+        except KeyError:
+            pass
         return params
 
     def announce(self, options=None, event="announce"):
@@ -84,10 +93,6 @@ class ClientTest(unittest.TestCase):
     def setUp(self):
         self.client = tracker.Client("https://localhost:34001/api")
         self.tracker_host = "http://localhost:34000/"
-        try:
-            self.client.torrent_del(self.hash_1)
-        except exc.NotFoundError:
-            pass
         try:
             self.client.user_add(self.user_name, self.user_id, self.passkey)
         except exc.DuplicateError:
@@ -124,8 +129,8 @@ class ClientTest(unittest.TestCase):
             pass
 
     def test_announce(self):
-        self._load_test_torrent()
-        torrent_client = FakeTorrentClient(info_hash=self.hash_1, host="http://127.0.0.1:34000/")
+        info_hash = self._load_test_torrent(rand_info_hash())
+        torrent_client = FakeTorrentClient(info_hash=info_hash, host="http://127.0.0.1:34000/")
         resp = torrent_client.announce()
         self.assertTrue(resp.ok)
         peers = self.client.get_torrent_peers(self.hash_1)
