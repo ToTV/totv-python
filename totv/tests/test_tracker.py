@@ -55,8 +55,13 @@ class FakeTorrentClient(object):
         params = self._params.copy()
         if options:
             params.update(options)
+        for k in ['info_hash']:
+            try:
+                params[k] = hex2bin(params[k])
+            except KeyError:
+                pass
         try:
-            params['info_hash'] = hex2bin(params['info_hash'])
+            params['peer_id'] = quote_plus(params['peer_id'])
         except KeyError:
             pass
         return params
@@ -76,34 +81,70 @@ class FakeTorrentClient(object):
         return self.announce(options=options, event="completed")
 
 
+class TestTorrent(object):
+    def __init__(self, info_hash, torrent_id, name):
+        self.info_hash = info_hash
+        self.torrent_id = torrent_id
+        self.name = name
+
+
+class TestUser(object):
+    def __init__(self, username, user_id, passkey):
+        self.username = username
+        self.user_id = user_id
+        self.passkey = passkey
+
+
 class ClientTest(unittest.TestCase):
     """
     This test suite is used to test both the client itself as well as acting as a test suite for the
     tracker and api endpoints used on the tracker. Eventually the tracker will have integrated tests for
     these.
     """
-    hash_1 = rand_info_hash()
-    id_1 = random.randint(1000000, 1000000000)
-    name_1 = "test.torrent.{}-group".format(rand_info_hash(10))
-    user_name = "test_user"
-    user_id = 99999999
-    passkey = rand_info_hash(32)
+    # hash_1 = rand_info_hash()
+    # id_1 = random.randint(100000, 99999999)
+    # name_1 = "test.torrent.{}-group".format(rand_info_hash(10))
+    # user_name = "test_user_{}".format(rand_info_hash(6))
+    # user_id = random.randint(100000, 99999999)
+    # passkey = rand_info_hash(32)
     added = []
+    _users = []
 
     def setUp(self):
         self.client = tracker.Client("https://localhost:34001/api")
         self.tracker_host = "http://localhost:34000/"
         try:
-            self.client.user_add(self.user_name, self.user_id, self.passkey)
+            self.client.whitelist_add("-DE", "Deluge Test")
         except exc.DuplicateError:
             pass
 
-    def _load_test_torrent(self, info_hash=None):
+    def _load_test_torrent(self, info_hash=None, torrent_id=None, name=None) -> TestTorrent:
         if info_hash is None:
-            info_hash = self.hash_1
-        self.client.torrent_add(info_hash, self.id_1, self.name_1)
+            info_hash = rand_info_hash()
+        if torrent_id is None:
+            torrent_id = random.randint(100000, 99999999)
+        if name is None:
+            name = self._rand_torrent_name()
+        self.client.torrent_add(info_hash, torrent_id, name)
         self.added.append(info_hash)
-        return info_hash
+        return TestTorrent(info_hash, torrent_id, name)
+
+    def _rand_torrent_name(self):
+        return "test.torrent.{}-group".format(rand_info_hash(10))
+
+    def _load_test_user(self, user_name=None, user_id=None, passkey=None) -> TestUser:
+        if user_name is None:
+            user_name = rand_info_hash(10)
+        if user_id is None:
+            user_id = random.randint(100000, 99999999)
+        if passkey is None:
+            passkey = rand_info_hash(32)
+        try:
+            self.client.user_add(user_name, user_id, passkey)
+        except exc.DuplicateError:
+            pass
+        self._users.append(user_id)
+        return TestUser(user_name, user_id, passkey)
 
     def assertBencodedValues(self, benc_str, checks=None):
         try:
@@ -123,56 +164,75 @@ class ClientTest(unittest.TestCase):
             except exc.NotFoundError:
                 pass
         self.added = []
-        try:
-            self.client.user_del(self.user_id)
-        except exc.NotFoundError:
-            pass
+        for user_id in self._users:
+            try:
+                self.client.user_del(user_id)
+            except exc.NotFoundError:
+                pass
+        self._users = []
+        self.client.whitelist_del("-DE")
+
+    def _rand_peer_id(self):
+        return "-DE-{}".format(rand_info_hash(6))
 
     def test_announce(self):
-        info_hash = self._load_test_torrent(rand_info_hash())
-        torrent_client = FakeTorrentClient(info_hash=info_hash, host="http://127.0.0.1:34000/")
-        resp = torrent_client.announce()
+        tor = self._load_test_torrent()
+        torrent_client = FakeTorrentClient(info_hash=tor.info_hash, host="http://127.0.0.1:34000/")
+
+        # Check for first peer added
+        passkey1, peer_id1 = rand_info_hash(32), self._rand_peer_id()
+        opts_1 = {'passkey': passkey1, 'peer_id': peer_id1}
+        resp = torrent_client.announce(opts_1)
         self.assertTrue(resp.ok)
-        peers = self.client.get_torrent_peers(self.hash_1)
-        for peer in peers:
-            if peer['peer_id'] == torrent_client._params['peer_id']:
-                break
-        else:
-            self.fail("Could not find peer in active swarm")
+        peers = self.client.get_torrent_peers(tor.info_hash)
+        self.assertIn(peer_id1, [p['peer_id'] for p in peers])
+
+        # Add a 2nd
+        passkey2, peer_id2 = rand_info_hash(32), self._rand_peer_id()
+        torrent_client.announce({'passkey': passkey2, 'peer_id': peer_id2})
+        peers2 = self.client.get_torrent_peers(tor.info_hash)
+        self.assertEqual(2, len(peers2))
+        self.assertIn(peer_id2, [p['peer_id'] for p in peers2])
+
+        # Try and remove the 1st peer
+        resp = torrent_client.stop(opts_1)
+        self.assertTrue(resp.ok)
 
     def test_announce_failures(self):
-        self._load_test_torrent()
-        torrent_client = FakeTorrentClient(info_hash=self.hash_1, host="http://127.0.0.1:34000/")
+        tor = self._load_test_torrent()
+        torrent_client = FakeTorrentClient(info_hash=tor.info_hash, host="http://127.0.0.1:34000/")
         resp_1 = torrent_client.announce(options={'info_hash': rand_info_hash()})
         self.assertEqual(900, resp_1.status_code)
         self.assertBencodedValues(resp_1.content, {b"failure reason": b"Generic Error :("})
 
     def test_torrent_get(self):
-        self._load_test_torrent()
-        t1 = self.client.torrent_get(self.hash_1)
+        tor = self._load_test_torrent()
+        t1 = self.client.torrent_get(tor.info_hash)
         self.assertIsNotNone(t1)
-        self.assertEqual(t1['torrent_id'], self.id_1)
+        self.assertEqual(t1['torrent_id'], tor.torrent_id)
         with self.assertRaises(exc.NotFoundError):
             self.client.torrent_get(rand_info_hash())
 
     def test_torrent_add(self):
+        name = self._rand_torrent_name()
         torrent_id = random.randint(999999, 99999999)
         info_hash = rand_info_hash()
         self.added.append(info_hash)
-        resp = self.client.torrent_add(info_hash, torrent_id, self.name_1)
+        resp = self.client.torrent_add(info_hash, torrent_id, name)
         self.assertEqual(httplib.CREATED, resp.status_code)
-        resp2 = self.client.torrent_add(info_hash, torrent_id, self.name_1)
+        resp2 = self.client.torrent_add(info_hash, torrent_id, name)
         self.assertEqual(httplib.ACCEPTED, resp2.status_code)
-
+        self.added.append(info_hash)
 
     def test_torrent_del(self):
-        self._load_test_torrent()
-        resp = self.client.torrent_del(self.hash_1)
+        tor = self._load_test_torrent()
+        resp = self.client.torrent_del(tor.info_hash)
         self.assertTrue(resp)
         with self.assertRaises(exc.NotFoundError):
             self.client.torrent_del(rand_info_hash())
 
     def test_user_get(self):
+        self._load_test_user()
         resp = self.client.user_get(94)
         self.assertEqual(resp['user_id'], 94)
         with self.assertRaises(exc.NotFoundError):

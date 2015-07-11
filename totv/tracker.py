@@ -4,6 +4,7 @@ This module is used to communicate with mika's API
 """
 from __future__ import absolute_import, print_function, unicode_literals
 import re
+from urllib.parse import unquote_plus
 import redis
 import requests
 from http import client as httplib
@@ -156,7 +157,14 @@ class Client(object):
             raise exc.BadResponse("Invalid response returned from tracker")
 
     def get_torrent_peers(self, info_hash):
-        return self._request("/torrent/{}/peers".format(validate_info_hash(info_hash))).json()
+        resp = self._request("/torrent/{}/peers".format(validate_info_hash(info_hash)))
+        if resp.ok:
+            peers = resp.json()
+            for peer in peers:
+                peer['peer_id'] = unquote_plus(peer['peer_id'])
+            return peers
+        else:
+            raise Exception("ahh")
 
     def user_get_active(self, user_id):
         pass
