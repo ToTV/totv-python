@@ -176,8 +176,10 @@ class ClientTest(unittest.TestCase):
         return "-DE-{}".format(rand_info_hash(6))
 
     def test_announce(self):
+        user = self._load_test_user()
         tor = self._load_test_torrent()
-        torrent_client = FakeTorrentClient(info_hash=tor.info_hash, host="http://127.0.0.1:34000/")
+        torrent_client = FakeTorrentClient(
+            info_hash=tor.info_hash, host="http://127.0.0.1:34000/", passkey=user.passkey)
 
         # Check for first peer added
         passkey1, peer_id1 = rand_info_hash(32), self._rand_peer_id()
@@ -202,8 +204,8 @@ class ClientTest(unittest.TestCase):
         tor = self._load_test_torrent()
         torrent_client = FakeTorrentClient(info_hash=tor.info_hash, host="http://127.0.0.1:34000/")
         resp_1 = torrent_client.announce(options={'info_hash': rand_info_hash()})
-        self.assertEqual(900, resp_1.status_code)
-        self.assertBencodedValues(resp_1.content, {b"failure reason": b"Generic Error :("})
+        self.assertEqual(tracker.MSG_INVALID_AUTH, resp_1.status_code)
+        self.assertBencodedValues(resp_1.content, {b"failure reason": b"Invalid passkey supplied"})
 
     def test_torrent_get(self):
         tor = self._load_test_torrent()

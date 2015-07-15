@@ -10,10 +10,23 @@ import requests
 from http import client as httplib
 from totv import exc
 
-
-
 _base_url = ""
 _api_key = ""
+
+MSG_OK = 0
+MSG_INVALID_REQ_TYPE = 100
+MSG_MISSING_INFO_HASH = 101
+MSG_MISSING_PEER_ID = 102
+MSG_MISSING_PORT = 103
+MSG_INVALID_PORT = 104
+MSG_INVALID_INFO_HASH = 150
+MSG_INVALID_PEER_ID = 151
+MSG_INVALID_NUM_WANT = 152
+MSG_INFO_HASH_NOT_FOUND = 200
+MSG_INVALID_AUTH = 490
+MSG_CLIENT_REQUEST_TOO_FAST = 500
+MSG_MALFORMED_REQUEST = 901
+MSG_GENERIC_ERROR = 900
 
 
 def configure(base_url, key):
@@ -87,7 +100,8 @@ class Client(object):
     :type verify: bool
     """
 
-    def __init__(self, api_uri, username="dev", password="dev", redis_host="localhost", redis_port=6379, redis_db=0, verify=False):
+    def __init__(self, api_uri, username="dev", password="dev", redis_host="localhost",
+                 redis_port=6379, redis_db=0, verify=False):
         self._api_uri = api_uri
         self._auth = (username, password) if username and password else None
         self._redis_host = redis_host
@@ -102,7 +116,8 @@ class Client(object):
         if method == "get":
             resp = requests.get(self._make_url(path), verify=self._verify, auth=self._auth)
         elif method == "post":
-            resp = requests.post(self._make_url(path), json=payload, verify=self._verify, auth=self._auth)
+            resp = requests.post(self._make_url(path), json=payload, verify=self._verify,
+                                 auth=self._auth)
         elif method == "delete":
             resp = requests.delete(self._make_url(path), verify=self._verify, auth=self._auth)
         else:
@@ -178,7 +193,8 @@ class Client(object):
     def user_get_hnr(self, user_id):
         pass
 
-    def user_update(self, user_id, uploaded=None, downloaded=None, passkey=None, can_leech=None, enabled=None):
+    def user_update(self, user_id, uploaded=None, downloaded=None, passkey=None, can_leech=None,
+                    enabled=None):
         user = self.user_get(user_id)
         updated_data = {
             "name": user["username"],
@@ -234,7 +250,8 @@ class Client(object):
         if resp.ok:
             return True
         elif resp.status_code == httplib.CONFLICT:
-            raise exc.DuplicateError("Whitelist entry already exists: {}/{}".format(prefix, client_name))
+            raise exc.DuplicateError(
+                "Whitelist entry already exists: {}/{}".format(prefix, client_name))
         else:
             raise exc.BadResponse("Bad response from server: {}".format(resp.status_code))
 
@@ -297,7 +314,8 @@ class Client(object):
             else:
                 user = self._redis.hgetall(key)
                 self._validate_int_fields(key, user,
-                                          [b'downloaded', b'uploaded', b'snatches', b'announces', b'corrupt'])
+                                          [b'downloaded', b'uploaded', b'snatches', b'announces',
+                                           b'corrupt'])
         for key in old_keys:
             print(key)
             if delete:
@@ -316,7 +334,8 @@ class Client(object):
                 except Exception:
                     torrent = self._redis.hgetall(key.decode())
                     self._validate_int_fields(key.decode(), torrent,
-                                              [b'downloaded', b'uploaded', b'snatches', b'announces', b'seeders',
+                                              [b'downloaded', b'uploaded', b'snatches',
+                                               b'announces', b'seeders',
                                                b'leechers'], update=delete)
                 else:
                     old_keys_2.append(key)
