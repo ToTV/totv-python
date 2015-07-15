@@ -95,19 +95,8 @@ class TestUser(object):
         self.passkey = passkey
 
 
-class ClientTest(unittest.TestCase):
-    """
-    This test suite is used to test both the client itself as well as acting as a test suite for the
-    tracker and api endpoints used on the tracker. Eventually the tracker will have integrated tests for
-    these.
-    """
-    # hash_1 = rand_info_hash()
-    # id_1 = random.randint(100000, 99999999)
-    # name_1 = "test.torrent.{}-group".format(rand_info_hash(10))
-    # user_name = "test_user_{}".format(rand_info_hash(6))
-    # user_id = random.randint(100000, 99999999)
-    # passkey = rand_info_hash(32)
-    added = []
+class _TrackerTestBase(unittest.TestCase):
+    _added = []
     _users = []
 
     def setUp(self):
@@ -118,6 +107,24 @@ class ClientTest(unittest.TestCase):
         except exc.DuplicateError:
             pass
 
+    def tearDown(self):
+        for ih in self._added:
+            try:
+                self.client.torrent_del(ih)
+            except exc.NotFoundError:
+                pass
+        self._added = []
+        for user_id in self._users:
+            try:
+                self.client.user_del(user_id)
+            except exc.NotFoundError:
+                pass
+        self._users = []
+        self.client.whitelist_del("-DE")
+
+    def _rand_torrent_name(self):
+        return "test.torrent.{}-group".format(rand_info_hash(10))
+
     def _load_test_torrent(self, info_hash=None, torrent_id=None, name=None) -> TestTorrent:
         if info_hash is None:
             info_hash = rand_info_hash()
@@ -126,11 +133,8 @@ class ClientTest(unittest.TestCase):
         if name is None:
             name = self._rand_torrent_name()
         self.client.torrent_add(info_hash, torrent_id, name)
-        self.added.append(info_hash)
+        self._added.append(info_hash)
         return TestTorrent(info_hash, torrent_id, name)
-
-    def _rand_torrent_name(self):
-        return "test.torrent.{}-group".format(rand_info_hash(10))
 
     def _load_test_user(self, user_name=None, user_id=None, passkey=None) -> TestUser:
         if user_name is None:
@@ -157,23 +161,16 @@ class ClientTest(unittest.TestCase):
                 # for k, v in checks.items():
                 #     self.assertEqual(v, benc_data[k])
 
-    def tearDown(self):
-        for ih in self.added:
-            try:
-                self.client.torrent_del(ih)
-            except exc.NotFoundError:
-                pass
-        self.added = []
-        for user_id in self._users:
-            try:
-                self.client.user_del(user_id)
-            except exc.NotFoundError:
-                pass
-        self._users = []
-        self.client.whitelist_del("-DE")
-
     def _rand_peer_id(self):
         return "-DE-{}".format(rand_info_hash(6))
+
+
+class ClientTest(_TrackerTestBase):
+    """
+    This test suite is used to test both the client itself as well as acting as a test suite for the
+    tracker and api endpoints used on the tracker. Eventually the tracker will have integrated tests for
+    these.
+    """
 
     def test_announce(self):
         user = self._load_test_user()
@@ -200,12 +197,21 @@ class ClientTest(unittest.TestCase):
         resp = torrent_client.stop(opts_1)
         self.assertTrue(resp.ok)
 
-    def test_announce_failures(self):
+    def test_announce_bad_passkey(self):
+        # Test for a invalid passkey
         tor = self._load_test_torrent()
         torrent_client = FakeTorrentClient(info_hash=tor.info_hash, host="http://127.0.0.1:34000/")
         resp_1 = torrent_client.announce(options={'info_hash': rand_info_hash()})
         self.assertEqual(tracker.MSG_INVALID_AUTH, resp_1.status_code)
         self.assertBencodedValues(resp_1.content, {b"failure reason": b"Invalid passkey supplied"})
+
+    def test_announce_bad_infohash(self):
+        tor = self._load_test_torrent()
+        torrent_client = FakeTorrentClient(info_hash=tor.info_hash, host="http://127.0.0.1:34000/")
+        torrent_client.passkey = self._load_test_user().passkey
+        resp_2 = torrent_client.announce(options={'info_hash': rand_info_hash()})
+        self.assertEqual(tracker.MSG_INFO_HASH_NOT_FOUND, resp_2.status_code)
+        self.assertBencodedValues(resp_2.content, {b"failure reason": b"Unknown infohash"})
 
     def test_torrent_get(self):
         tor = self._load_test_torrent()
@@ -219,12 +225,12 @@ class ClientTest(unittest.TestCase):
         name = self._rand_torrent_name()
         torrent_id = random.randint(999999, 99999999)
         info_hash = rand_info_hash()
-        self.added.append(info_hash)
+        self._added.append(info_hash)
         resp = self.client.torrent_add(info_hash, torrent_id, name)
         self.assertEqual(httplib.CREATED, resp.status_code)
         resp2 = self.client.torrent_add(info_hash, torrent_id, name)
         self.assertEqual(httplib.ACCEPTED, resp2.status_code)
-        self.added.append(info_hash)
+        self._added.append(info_hash)
 
     def test_torrent_del(self):
         tor = self._load_test_torrent()
