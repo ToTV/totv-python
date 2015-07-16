@@ -111,6 +111,7 @@ class _TrackerTestBase(unittest.TestCase):
             pass
 
     def tearDown(self):
+        """ Cleanup anything that may be left """
         for ih in self._added:
             try:
                 self.client.torrent_del(ih)
@@ -129,9 +130,13 @@ class _TrackerTestBase(unittest.TestCase):
             pass
 
     def _rand_torrent_name(self):
+        """ Generate a random torrent name that should be unique """
         return "test.torrent.{}-group".format(rand_info_hash(10))
 
-    def _load_test_torrent(self, info_hash=None, torrent_id=None, name=None) -> TestTorrent:
+    def _load_test_torrent(self, info_hash=None, torrent_id=None, name=None):
+        """
+        :rtype: TestTorrent
+        """
         if info_hash is None:
             info_hash = rand_info_hash()
         if torrent_id is None:
@@ -142,7 +147,10 @@ class _TrackerTestBase(unittest.TestCase):
         self._added.append(info_hash)
         return TestTorrent(info_hash, torrent_id, name)
 
-    def _load_test_user(self, user_name=None, user_id=None, passkey=None) -> TestUser:
+    def _load_test_user(self, user_name=None, user_id=None, passkey=None):
+        """
+        :rtype: TestUser
+        """
         if user_name is None:
             user_name = rand_info_hash(10)
         if user_id is None:
@@ -155,6 +163,13 @@ class _TrackerTestBase(unittest.TestCase):
             pass
         self._users.append(user_id)
         return TestUser(user_name, user_id, passkey)
+
+    def assertTrackerErrorOK(self, expected_status, resp):
+        """
+        Make sure the error response returned is the expected one.
+        """
+        self.assertEqual(expected_status, resp.status_code, "Got unexpected status code: {}".format(resp.status_code))
+        self.assertBencodedValues(resp.content, {b"failure reason": tracker.messages[resp.status_code]})
 
     def assertBencodedValues(self, benc_str, checks=None):
         try:
@@ -171,7 +186,7 @@ class _TrackerTestBase(unittest.TestCase):
         return "-DE-{}".format(rand_info_hash(6))
 
 
-class ClientTest(_TrackerTestBase):
+class TrackerTest(_TrackerTestBase):
     """
     This test suite is used to test both the client itself as well as acting as a test suite for the
     tracker and api endpoints used on the tracker. Eventually the tracker will have integrated tests for
@@ -183,6 +198,7 @@ class ClientTest(_TrackerTestBase):
         tor = self._load_test_torrent()
         self._torrent_client.passkey = user.passkey
         self._torrent_client._params['info_hash'] = tor.info_hash
+
         # Check for first peer added
         passkey1, peer_id1 = rand_info_hash(32), self._rand_peer_id()
         opts_1 = {'passkey': passkey1, 'peer_id': peer_id1}
@@ -199,8 +215,10 @@ class ClientTest(_TrackerTestBase):
         self.assertIn(peer_id2, [p['peer_id'] for p in peers2])
 
         # Try and remove the 1st peer
-        resp = self._torrent_client.stop(opts_1)
-        self.assertTrue(resp.ok)
+        self.assertTrue(self._torrent_client.stop(opts_1).ok)
+
+        # Make sure it is removed from swarm
+        self.assertEqual(1, len(self.client.get_torrent_peers(tor.info_hash)))
 
     def test_announce_bad_passkey(self):
         # Test for a invalid passkey
@@ -209,20 +227,29 @@ class ClientTest(_TrackerTestBase):
         self.assertBencodedValues(resp_1.content, {b"failure reason": b"Invalid passkey supplied"})
 
     def test_announce_bad_infohash(self):
+        # Test for a invalid info_hash
         self._torrent_client.passkey = self._load_test_user().passkey
-        resp_2 = self._torrent_client.announce(options={'info_hash': rand_info_hash()})
-        self.assertEqual(tracker.MSG_INFO_HASH_NOT_FOUND, resp_2.status_code)
-        self.assertBencodedValues(resp_2.content, {b"failure reason": b"Unknown infohash"})
+        self.assertTrackerErrorOK(
+            tracker.MSG_INFO_HASH_NOT_FOUND,
+            self._torrent_client.announce(options={'info_hash': rand_info_hash()})
+        )
+        self.assertTrackerErrorOK(
+            tracker.MSG_INFO_HASH_NOT_FOUND,
+            self._torrent_client.announce(options={'info_hash': ""})
+        )
 
     def test_announce_missing_params(self):
-        tor = self._load_test_torrent()
-        self._torrent_client._params['info_hash'] = tor.info_hash
+        self._torrent_client._params['info_hash'] = self._load_test_torrent().info_hash
         self._torrent_client.passkey = self._load_test_user().passkey
         del self._torrent_client._params['port']
         del self._torrent_client._params['left']
-        resp_2 = self._torrent_client.announce()
-        self.assertEqual(tracker.MSG_GENERIC_ERROR, resp_2.status_code)
+        self.assertTrackerErrorOK(tracker.MSG_QUERY_PARSE_FAIL, self._torrent_client.announce())
 
+
+class ClientTest(_TrackerTestBase):
+    """
+    Tests for the API portion of the tracker, using the client library.
+    """
     def test_torrent_get(self):
         tor = self._load_test_torrent()
         t1 = self.client.torrent_get(tor.info_hash)

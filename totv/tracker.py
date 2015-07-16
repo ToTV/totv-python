@@ -25,8 +25,26 @@ MSG_INVALID_NUM_WANT = 152
 MSG_INFO_HASH_NOT_FOUND = 480
 MSG_INVALID_AUTH = 490
 MSG_CLIENT_REQUEST_TOO_FAST = 500
-MSG_MALFORMED_REQUEST = 901
 MSG_GENERIC_ERROR = 900
+MSG_MALFORMED_REQUEST = 901
+MSG_QUERY_PARSE_FAIL = 902
+
+messages = {
+    MSG_INVALID_REQ_TYPE: b"Invalid request type",
+    MSG_MISSING_INFO_HASH: b"info_hash missing from request",
+    MSG_MISSING_PEER_ID: b"peer_id missing from request",
+    MSG_MISSING_PORT: b"port missing from request",
+    MSG_INVALID_PORT: b"Invalid port",
+    MSG_INVALID_AUTH: b"Invalid passkey supplied",
+    MSG_INVALID_INFO_HASH: b"Torrent info hash must be 20 characters",
+    MSG_INVALID_PEER_ID: b"Peer ID Invalid",
+    MSG_INVALID_NUM_WANT: b"num_want invalid",
+    MSG_INFO_HASH_NOT_FOUND: b"Unknown infohash",
+    MSG_CLIENT_REQUEST_TOO_FAST: b"Slow down there jimmy.",
+    MSG_MALFORMED_REQUEST: b"Malformed request",
+    MSG_GENERIC_ERROR: b"Generic Error",
+    MSG_QUERY_PARSE_FAIL: b"Could not parse request"
+}
 
 
 def configure(base_url, key):
