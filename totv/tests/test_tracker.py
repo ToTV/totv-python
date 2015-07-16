@@ -98,10 +98,13 @@ class TestUser(object):
 class _TrackerTestBase(unittest.TestCase):
     _added = []
     _users = []
+    _ip = "10.0.10.232"
+    _torrent_client = FakeTorrentClient()
 
     def setUp(self):
-        self.client = tracker.Client("https://localhost:34001/api")
-        self.tracker_host = "http://localhost:34000/"
+        self.client = tracker.Client("https://{}:34001/api".format(self._ip))
+        self.tracker_host = "http://{}:34000/".format(self._ip)
+        self._torrent_client = FakeTorrentClient(host="http://{}:34000/".format(self._ip))
         try:
             self.client.whitelist_add("-DE", "Deluge Test")
         except exc.DuplicateError:
@@ -120,7 +123,10 @@ class _TrackerTestBase(unittest.TestCase):
             except exc.NotFoundError:
                 pass
         self._users = []
-        self.client.whitelist_del("-DE")
+        try:
+            self.client.whitelist_del("-DE")
+        except exc.NotFoundError:
+            pass
 
     def _rand_torrent_name(self):
         return "test.torrent.{}-group".format(rand_info_hash(10))
@@ -175,43 +181,47 @@ class ClientTest(_TrackerTestBase):
     def test_announce(self):
         user = self._load_test_user()
         tor = self._load_test_torrent()
-        torrent_client = FakeTorrentClient(
-            info_hash=tor.info_hash, host="http://127.0.0.1:34000/", passkey=user.passkey)
-
+        self._torrent_client.passkey = user.passkey
+        self._torrent_client._params['info_hash'] = tor.info_hash
         # Check for first peer added
         passkey1, peer_id1 = rand_info_hash(32), self._rand_peer_id()
         opts_1 = {'passkey': passkey1, 'peer_id': peer_id1}
-        resp = torrent_client.announce(opts_1)
+        resp = self._torrent_client.announce(opts_1)
         self.assertTrue(resp.ok)
         peers = self.client.get_torrent_peers(tor.info_hash)
         self.assertIn(peer_id1, [p['peer_id'] for p in peers])
 
         # Add a 2nd
         passkey2, peer_id2 = rand_info_hash(32), self._rand_peer_id()
-        torrent_client.announce({'passkey': passkey2, 'peer_id': peer_id2})
+        self._torrent_client.announce({'passkey': passkey2, 'peer_id': peer_id2})
         peers2 = self.client.get_torrent_peers(tor.info_hash)
         self.assertEqual(2, len(peers2))
         self.assertIn(peer_id2, [p['peer_id'] for p in peers2])
 
         # Try and remove the 1st peer
-        resp = torrent_client.stop(opts_1)
+        resp = self._torrent_client.stop(opts_1)
         self.assertTrue(resp.ok)
 
     def test_announce_bad_passkey(self):
         # Test for a invalid passkey
-        tor = self._load_test_torrent()
-        torrent_client = FakeTorrentClient(info_hash=tor.info_hash, host="http://127.0.0.1:34000/")
-        resp_1 = torrent_client.announce(options={'info_hash': rand_info_hash()})
+        resp_1 = self._torrent_client.announce(options={'info_hash': rand_info_hash()})
         self.assertEqual(tracker.MSG_INVALID_AUTH, resp_1.status_code)
         self.assertBencodedValues(resp_1.content, {b"failure reason": b"Invalid passkey supplied"})
 
     def test_announce_bad_infohash(self):
-        tor = self._load_test_torrent()
-        torrent_client = FakeTorrentClient(info_hash=tor.info_hash, host="http://127.0.0.1:34000/")
-        torrent_client.passkey = self._load_test_user().passkey
-        resp_2 = torrent_client.announce(options={'info_hash': rand_info_hash()})
+        self._torrent_client.passkey = self._load_test_user().passkey
+        resp_2 = self._torrent_client.announce(options={'info_hash': rand_info_hash()})
         self.assertEqual(tracker.MSG_INFO_HASH_NOT_FOUND, resp_2.status_code)
         self.assertBencodedValues(resp_2.content, {b"failure reason": b"Unknown infohash"})
+
+    def test_announce_missing_params(self):
+        tor = self._load_test_torrent()
+        self._torrent_client._params['info_hash'] = tor.info_hash
+        self._torrent_client.passkey = self._load_test_user().passkey
+        del self._torrent_client._params['port']
+        del self._torrent_client._params['left']
+        resp_2 = self._torrent_client.announce()
+        self.assertEqual(tracker.MSG_GENERIC_ERROR, resp_2.status_code)
 
     def test_torrent_get(self):
         tor = self._load_test_torrent()
@@ -292,3 +302,6 @@ class ClientTest(_TrackerTestBase):
         self.assertGreater(resp['process'], 0)
         self.assertGreater(resp['system'], 0)
         self.assertGreater(resp['system'], resp['process'])
+
+if __name__ == '__main__':
+    unittest.main()
