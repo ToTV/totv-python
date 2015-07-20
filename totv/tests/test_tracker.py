@@ -8,6 +8,7 @@ from urllib.parse import quote_plus
 import bencodepy
 import binascii
 import requests
+import time
 from totv import tracker
 from totv import exc
 
@@ -234,7 +235,7 @@ class TrackerTest(_TrackerTestBase):
             self._torrent_client.announce(options={'info_hash': rand_info_hash()})
         )
         self.assertTrackerErrorOK(
-            tracker.MSG_INFO_HASH_NOT_FOUND,
+            tracker.MSG_QUERY_PARSE_FAIL,
             self._torrent_client.announce(options={'info_hash': ""})
         )
 
@@ -244,6 +245,21 @@ class TrackerTest(_TrackerTestBase):
         del self._torrent_client._params['port']
         del self._torrent_client._params['left']
         self.assertTrackerErrorOK(tracker.MSG_QUERY_PARSE_FAIL, self._torrent_client.announce())
+
+    def test_announce_bonus(self):
+        self._torrent_client._params['info_hash'] = self._load_test_torrent().info_hash
+        user = self._load_test_user()
+        self._torrent_client.passkey = user.passkey
+
+        data = self.client.user_get(user.user_id)
+        self.assertEqual(0, data['points'])
+        self._torrent_client.announce(options={"uploaded": 1})
+
+        self.client.user_update(user.user_id, uploaded=1000000000001)
+
+        self._torrent_client.announce(options={"uploaded": 1000000000001})
+        data_3 = self.client.user_get(user.user_id)
+        self.assertEqual(data_3['points'], 15)
 
 
 class ClientTest(_TrackerTestBase):
