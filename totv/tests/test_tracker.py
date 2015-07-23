@@ -8,7 +8,6 @@ from urllib.parse import quote_plus
 import bencodepy
 import binascii
 import requests
-import time
 from totv import tracker
 from totv import exc
 
@@ -259,7 +258,7 @@ class TrackerTest(_TrackerTestBase):
 
         self._torrent_client.announce(options={"uploaded": 1000000000001})
         data_3 = self.client.user_get(user.user_id)
-        self.assertEqual(data_3['points'], 15)
+        self.assertEqual(data_3['points'], 1)
 
 
 class ClientTest(_TrackerTestBase):
@@ -273,6 +272,16 @@ class ClientTest(_TrackerTestBase):
         self.assertEqual(t1['torrent_id'], tor.torrent_id)
         with self.assertRaises(exc.NotFoundError):
             self.client.torrent_get(rand_info_hash())
+
+    def test_torrent_counts(self):
+        tor = self._load_test_torrent()
+        counts = self.client.get_torrent_counts()
+        self.assertTrue(len(counts) >= 1)
+        for i in counts:
+            if i['info_hash'] == tor.info_hash:
+                break
+        else:
+            self.fail("Could not find matching entry")
 
     def test_torrent_add(self):
         name = self._rand_torrent_name()

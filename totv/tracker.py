@@ -200,6 +200,26 @@ class Client(object):
         else:
             raise Exception("ahh")
 
+    def get_torrent_counts(self):
+        """ Fetch and return a list of dictionary objects containing the current
+        data related to seeder/leeder/snatch counts for all torrents currently
+        tracked in the tracker
+
+            [
+                {
+                    'leechers': 0,
+                    'info_hash': '9c2f8f7f4996b2853509247504681dbe98e5d0c1',
+                    'snatches': 0,
+                    'seeders': 0,
+                    'torrent_id': 1112
+                }, ...
+            ]
+
+        :return: List of dictionaries with torrent stats
+        :rtype: []dict
+        """
+        return self._request("/counts").json()
+
     def user_get_active(self, user_id):
         pass
 
